@@ -1,0 +1,124 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: realtime-inference
+  namespace: inference
+  labels:
+    app: chimera
+    tier: inference
+    latency: critical
+spec:
+  replicas: 8
+  selector:
+    matchLabels:
+      app: chimera
+      tier: inference
+      latency: critical
+  template:
+    metadata:
+      labels:
+        app: chimera
+        tier: inference
+        latency: critical
+    spec:
+      priorityClassName: realtime-inference
+      schedulerName: chimera-scheduler  # Use our custom GPU-aware scheduler
+      containers:
+      - name: inference-container
+        image: ${REGISTRY}/chimera/realtime-processor:latest
+        env:
+        - name: NATS_SERVERS
+          value: "nats://nats-0.nats:4222,nats://nats-1.nats:4222,nats://nats-2.nats:4222,nats://nats-3.nats:4222,nats://nats-4.nats:4222"
+        - name: NATS_STREAM_SUBJECT
+          value: "chimera.inference.realtime.*"
+        - name: TRITON_URL
+          value: "triton-inference-server.inference.svc.cluster.local:8001"
+        - name: ENABLE_TLS
+          value: "true"
+        - name: MAX_BATCH_SIZE
+          value: "8"
+        - name: MAX_LATENCY_MS
+          value: "50"
+        - name: REQUEST_TIMEOUT_MS
+          value: "150"
+        volumeMounts:
+        - name: nats-certs
+          mountPath: /etc/nats/certs
+          readOnly: true
+        - name: dshm
+          mountPath: /dev/shm
+        resources:
+          limits:
+            nvidia.com/gpu: 1
+          requests:
+            nvidia.com/gpu: 1
+            cpu: "4"
+            memory: "16Gi"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - name: nats-certs
+        secret:
+          secretName: nats-client-tls
+      - name: dshm
+        emptyDir:
+          medium: Memory
+          sizeLimit: 4Gi
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: nvidia.com/gpu.product
+                operator: In
+                values:
+                - NVIDIA-H100-PCIe
+                - NVIDIA-H100-SXM5-80GB
+              - key: chimera/data-residency
+                operator: In
+                values:
+                - eu-gdpr  # For GDPR compliance
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 50
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: latency
+                  operator: In
+                  values:
+                  - critical
+              topologyKey: "kubernetes.io/hostname"
+      tolerations:
+      - key: "nvidia.com/gpu"
+        operator: "Exists"
+        effect: "NoSchedule"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: realtime-inference
+  namespace: inference
+  labels:
+    app: chimera
+    tier: inference
+spec:
+  selector:
+    app: chimera
+    tier: inference
+    latency: critical
+  ports:
+  - port: 8080
+    targetPort: 8080
+    name: http
+  type: ClusterIP

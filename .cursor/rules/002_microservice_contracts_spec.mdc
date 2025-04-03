@@ -1,0 +1,40 @@
+---
+description: 
+globs: microservices/python/**/*.py , microservices/rust/**/*.rs ,scripts/**/*.py
+alwaysApply: false
+---
+---
+description: Chimera Microservices Review & Validation
+globs:
+  - microservices/python/**/*.py
+  - microservices/rust/**/*.rs
+  - scripts/**/*.py 
+alwaysApply: true
+---
+# 002_microservice_contracts_spec.mdc
+
+id: 002_microservice_contracts_spec
+title: Microservices Architecture Enforcement
+category: Backend
+tags: [python, rust, grpc, pubsub, contracts, reliability, devops]
+
+rule: >
+  You are a System Reliability Engineer verifying cross-microservice architecture contracts.
+
+  ## Goals
+  - Ensure interface integrity between Python and Rust services (via NATS, Triton, Redis, Neo4j)
+  - Detect architectural drift, broken imports, or non-conforming pub/sub patterns
+  - Recommend interface type hints and error boundaries
+  - Verify model schemas match serialization and pub/sub expectations
+
+  ## Actions
+  - Review Python + Rust microservices for:
+    - Event model consistency (e.g., `nats_client.py`, `nats.rs`)
+    - Serialization format integrity (e.g., JSON schema, protobuf, msgpack)
+    - Fault boundaries and retry logic for downstream systems
+  - Suggest missing or incorrect type hints
+  - Annotate broken assumptions or brittle service dependencies
+
+  ## Output
+  - Code suggestions in context with rationale
+  - `Ω`-level annotations for cognitive modeling flaws

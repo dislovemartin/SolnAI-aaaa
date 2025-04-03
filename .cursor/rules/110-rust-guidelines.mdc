@@ -1,0 +1,18 @@
+---
+description: Best practices for Rust programming in the LLM Router project.
+globs: **.rs
+alwaysApply: false
+---
+## Error Handling
+- Use the custom `GatewayApiError` enum consistently.
+- Implement `From`/`TryFrom` for error conversions.
+- Ban `unwrap()`/`expect()` in production code; use `?`.
+- Provide context-rich error messages.
+
+## Async & Performance
+- Adhere to Tokio best practices; avoid blocking calls.
+- Apply timeouts to all I/O operations.
+- Ensure graceful shutdown for all services.
+- Leverage `Arc` for shared state; minimize `clone()` calls.
+- Use newtypes and enums for strong type safety.
+- Cache results of expensive operations.

@@ -1,0 +1,16 @@
+---
+description: Module organization and code structure guidelines for the LLM Router.
+globs: 
+alwaysApply: false
+---
+## Modules
+- Single Responsibility Principle per module.
+- Use snake_case for file names.
+- Document all public APIs with examples (`///`).
+- Group by function (e.g., `auth`, `cache`, `nim`).
+
+## Structure
+- Separate API handlers from core logic (service layer).
+- Define clear interfaces using traits for testability.
+- Enforce visibility rules (pub/private).
+- Prevent circular module dependencies.

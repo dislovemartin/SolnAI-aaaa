@@ -1,0 +1,15 @@
+---
+description: Security and resilience strategies for the LLM Router.
+globs: **.rs
+alwaysApply: false
+---
+## Security
+- Never log API keys or sensitive payload data.
+- Load secrets exclusively from environment variables.
+- Validate and sanitize all external inputs (request bodies, headers, query params).
+
+## Resilience
+- Apply rate limits per API key/IP (configurable).
+- Implement circuit breakers with exponential backoff and jitter for backend calls.
+- Use TTL-based caching for deterministic responses; consider cache invalidation needs.
+- Exempt `/health` and `/metrics` from auth and rate limiting.

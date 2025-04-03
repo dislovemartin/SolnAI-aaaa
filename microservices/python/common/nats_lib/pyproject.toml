@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nats_lib"
+version = "0.1.0"
+authors = [{ name = "SolnAI", email = "info@solnai.com" }]
+description = "Enhanced NATS client with circuit breaker support"
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/solnai/nats_lib"
+"Bug Tracker" = "https://github.com/solnai/nats_lib/issues"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+asyncio_mode = "auto"
+addopts = [
+    "--cov=nats_lib",
+    "--cov-report=term-missing",
+    "--cov-report=xml:coverage.xml",
+    "--cov-report=html:coverage_html",
+    "-v",
+]

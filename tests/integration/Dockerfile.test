@@ -1,0 +1,31 @@
+FROM python:3.10-slim
+
+WORKDIR /tests
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    gnupg \
+    wget \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements
+COPY requirements.txt .
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Create results directory
+RUN mkdir -p /results
+
+# Set Python to use UTF-8 encoding
+ENV PYTHONIOENCODING=utf-8 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+# Set working directory to tests
+WORKDIR /tests
+
+# Default command - can be overridden
+CMD ["pytest", "-xvs"]

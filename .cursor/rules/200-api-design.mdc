@@ -1,0 +1,20 @@
+---
+description: API design standards for the LLM Router gateway.
+globs: **.rs
+alwaysApply: false
+---
+## API Design
+- Version endpoints (e.g., `/v1/`). Maintain backward compatibility within versions.
+- Validate requests strictly; return 4xx for client errors.
+- Use consistent JSON response format for success and errors.
+- Utilize standard HTTP methods and status codes correctly.
+
+## NIM Integration
+- Sanitize input for NIM unicode compatibility (see `nim.rs`).
+- Document required NIM environment variables.
+- Centralize handling of NIM-specific parameters/workarounds.
+
+## Routing
+- Ensure routing logic is deterministic and clearly documented.
+- Log routing decisions and selected backends.
+- Define and test fallback strategies for routing failures.

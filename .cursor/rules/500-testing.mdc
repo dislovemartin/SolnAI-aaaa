@@ -1,0 +1,18 @@
+---
+description: Testing and QA practices for the LLM Router.
+globs: **.rs
+alwaysApply: false
+---
+## Unit Tests (`src/`)
+- Test core logic functions and modules in isolation.
+- Mock external dependencies (HTTP clients, config sources).
+- Aim for high coverage of logic branches and error conditions.
+
+## Integration Tests (`tests/`)
+- Test full request flows through the API (e.g., `proxy` function).
+- Verify interactions between components (auth, cache, routing, NIM).
+- Validate error responses and status codes for different failure scenarios.
+- Include tests for resilience features (rate limiting, circuit breaking).
+
+## Documentation Tests (`///`)
+- Ensure code examples in public API documentation are correct and compile.

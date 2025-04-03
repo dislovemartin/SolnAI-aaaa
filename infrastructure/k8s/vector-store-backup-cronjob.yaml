@@ -1,0 +1,197 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: vector-store-backup
+  labels:
+    app: personalization-engine
+    component: vector-store-backup
+spec:
+  schedule: "0 1 * * *"  # Daily at 1 AM UTC
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: personalization-engine
+            component: vector-store-backup
+          annotations:
+            prometheus.io/scrape: "true"
+            prometheus.io/port: "9090"
+            prometheus.io/path: "/metrics"
+        spec:
+          containers:
+          - name: backup-job
+            image: ${REGISTRY}/chimera/personalization-engine:latest
+            imagePullPolicy: Always
+            command: ["/usr/local/bin/python"]
+            args:
+            - "-c"
+            - |
+              import asyncio
+              import os
+              from prometheus_client import start_http_server
+              from app.vector_store import VectorStore
+              from loguru import logger
+
+              # Start Prometheus metrics server
+              start_http_server(9090)
+              logger.info("Started Prometheus metrics server on port 9090")
+
+              async def run_backup():
+                  try:
+                      # Initialize vector store
+                      vector_store = VectorStore(
+                          redis_url=os.getenv("REDIS_URL"),
+                          backup_dir=os.getenv("BACKUP_DIR", "/data/backups"),
+                          s3_bucket=os.getenv("S3_BUCKET"),
+                          s3_prefix=os.getenv("S3_PREFIX", "vector_store_backups")
+                      )
+                      await vector_store.initialize()
+
+                      # Create backup
+                      backup_id = await vector_store.backup(upload_to_s3=True)
+                      logger.info(f"Backup {backup_id} completed successfully")
+
+                      # Clean up old backups
+                      await vector_store.cleanup_old_backups(
+                          retain_days=int(os.getenv("RETAIN_DAYS", "7")),
+                          retain_weekly=int(os.getenv("RETAIN_WEEKLY", "4")),
+                          retain_monthly=int(os.getenv("RETAIN_MONTHLY", "6"))
+                      )
+                      logger.info("Cleaned up old backups")
+
+                      # Close connections
+                      await vector_store.close()
+
+                  except Exception as e:
+                      logger.error(f"Backup failed: {e}")
+                      raise
+
+              asyncio.run(run_backup())
+            ports:
+            - name: metrics
+              containerPort: 9090
+              protocol: TCP
+            env:
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: redis-credentials
+                  key: url
+            - name: S3_BUCKET
+              valueFrom:
+                configMapKeyRef:
+                  name: backup-config
+                  key: s3_bucket
+            - name: S3_PREFIX
+              valueFrom:
+                configMapKeyRef:
+                  name: backup-config
+                  key: s3_prefix
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: aws-credentials
+                  key: access_key_id
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: aws-credentials
+                  key: secret_access_key
+            - name: AWS_DEFAULT_REGION
+              valueFrom:
+                configMapKeyRef:
+                  name: backup-config
+                  key: aws_region
+            - name: RETAIN_DAYS
+              value: "7"
+            - name: RETAIN_WEEKLY
+              value: "4"
+            - name: RETAIN_MONTHLY
+              value: "6"
+            - name: BACKUP_DIR
+              value: "/data/backups"
+            - name: LOG_LEVEL
+              value: "INFO"
+            volumeMounts:
+            - name: backup-storage
+              mountPath: /data/backups
+            readinessProbe:
+              httpGet:
+                path: /metrics
+                port: metrics
+              initialDelaySeconds: 5
+              periodSeconds: 10
+            livenessProbe:
+              httpGet:
+                path: /metrics
+                port: metrics
+              initialDelaySeconds: 15
+              periodSeconds: 20
+          volumes:
+          - name: backup-storage
+            persistentVolumeClaim:
+              claimName: vector-store-backup-pvc
+          restartPolicy: OnFailure
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: vector-store-backup-pvc
+  labels:
+    app: personalization-engine
+    component: vector-store-backup
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 50Gi
+  storageClassName: standard
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backup-config
+  labels:
+    app: personalization-engine
+    component: vector-store-backup
+data:
+  s3_bucket: "your-backup-bucket"
+  s3_prefix: "vector_store_backups"
+  aws_region: "us-west-2"
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: vector-store-backup-monitor
+  labels:
+    app: personalization-engine
+    component: vector-store-backup
+spec:
+  selector:
+    matchLabels:
+      app: personalization-engine
+      component: vector-store-backup
+  endpoints:
+  - port: metrics
+    interval: 30s
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vector-store-backup-metrics
+  labels:
+    app: personalization-engine
+    component: vector-store-backup
+spec:
+  ports:
+  - name: metrics
+    port: 9090
+    targetPort: metrics
+  selector:
+    app: personalization-engine
+    component: vector-store-backup 

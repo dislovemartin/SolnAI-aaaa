@@ -1,0 +1,22 @@
+---
+description: Logging, metrics, and health check standards for the LLM Router.
+globs: 
+alwaysApply: false
+---
+## Logging
+- Use structured JSON logging (configurable via `observability.json_logging`).
+- Include a unique request ID in all logs related to a request.
+- Log key events: request start/end, errors, backend calls, routing decisions.
+- Adhere to standard log levels (ERROR, WARN, INFO, DEBUG).
+
+## Metrics
+- Expose Prometheus metrics at `/metrics`.
+- Track request latency, status codes, cache performance, circuit breaker states.
+
+## Health Checks
+- Provide `/health/readiness` (includes dependency checks) and `/health/liveness`.
+- Ensure health checks are fast and reflect actual service availability
+
+## Ops Documentation
+- Maintain runbooks and config examples.
+- Track changes in a structured changelog.

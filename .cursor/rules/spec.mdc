@@ -1,0 +1,109 @@
+---
+description: refine the prompt
+globs: 
+alwaysApply: false
+---
+# 990_synapse_personalization_spec_prompt.mdc
+
+id: 990_synapse_personalization_spec_prompt
+title: Expert Prompt – Synapse Web Personalization Engine Spec Generator
+category: 9■■ Templates
+tags: [spec, architecture, AI, personalization, vector-db, RAG, proactive, markdown, cursor]
+
+rule: >
+  You will act as an elite Technical Architect and AI Systems Engineer tasked with generating the complete technical specification for the `Synapse Web AI-Driven Personalization Engine`.
+
+  ## 🔧 Objective
+  Output a production-grade **Markdown** specification aligned with enterprise standards, strategic foresight, and implementation readiness. This is used as a canonical document in the Synapse Web system for:
+  - Developer implementation
+  - System integration
+  - Architecture validation
+  - Documentation publication
+
+  ## 📂 Scope
+  - Generate the full specification as **Markdown** with section headers and code blocks
+  - Follow the structure below precisely
+  - Use concise, structured, engineering-oriented phrasing
+  - Provide interface stubs in **Python** (backend) and **TypeScript** (frontend)
+  - Infer and inject adaptive data schemas if not explicitly defined
+  - Highlight any unresolved issues in the final section with **confidence + risk levels**
+  - Do not ask for confirmation or clarification mid-generation
+  - Assume full developer authorization, cross-component visibility, and system context
+
+  ## 📄 Required Specification Sections
+  1. Overview & Purpose
+  2. System Capabilities
+  3. Technical Requirements
+      - Functional
+      - Non-functional
+      - Security/Compliance
+  4. System Architecture
+      - Component Breakdown
+      - Data Flow
+      - Model & RAG Integration
+      - Cross-component Interfaces
+  5. Data Schema & Storage
+      - User profile schema (adaptive if missing)
+      - Embedding/vector storage format
+      - Vector indexing strategy (HNSW, IVFADC, sharding, caching)
+      - Explicit/implicit feedback event schema
+  6. APIs & Interfaces
+      - Inputs (signals, behaviors, settings)
+      - Outputs (personalization, layout shifts)
+      - API format (OpenAPI/GraphQL)
+      - Code stubs in Python & TypeScript
+  7. Proactive Intelligence Layer
+      - Trigger logic, prediction patterns, suggestion model
+  8. Feedback & Learning Loop
+      - Explicit + Implicit feedback modeling
+      - Feedback ingestion & learning cycle
+  9. Operational Infrastructure
+      - Deployment, GPU usage, latency pipelines
+      - Fallbacks, observability, canary deploys
+ 10. Open Questions & Refinement Requests
+      - List missing info / unresolved architecture
+      - Confidence Level (High/Medium/Low)
+      - Risk Level (High/Medium/Low)
+      - Suggest fix paths or placeholders
+
+  ## 🧠 Clarification Logic
+  Before ending, analyze your own output for:
+  - Section cohesion and cross-consistency
+  - Missing system dependencies or unvalidated flows
+  - Mismatched assumptions
+  
+  Include this self-check result in the final "Open Questions" section with confidence/risk scores.
+
+  ## ✍️ Output Directives
+  Begin with:
+  ```markdown
+  # Synapse Web – AI Personalization Engine Technical Specification (v1)
+  ```
+  End with:
+  ```markdown
+  ## Open Questions and Refinement Requests
+  ```
+
+  ## 📘 Style
+  Apply user’s communication format:
+  - Token-efficient, execution-optimized
+  - Markdown-first, terminal-style clarity
+  - Systemic abstraction: `Ω`, `Λ`, `Φ`, `Ψ`, `Ξ`
+  - Strategy-forward framing, speculative future readiness
+  - Architecture as code
+
+context_ref:
+  - Ω*: reasoning layers
+  - Ψ: cognitive trace
+  - Φ*: design pattern capture
+  - Λ: reusable rules
+  - TDD.loop: fail-fix-repeat
+  - M.sync: memory sync
+  - Chimera: real-time AI backend
+  - Cursor: markdown-native development context
+  - RAG, Vector DB, Proactive UX
+
+status: production-ready
+```
+
+---

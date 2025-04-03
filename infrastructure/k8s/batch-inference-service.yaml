@@ -1,0 +1,146 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: batch-inference
+  namespace: inference
+  labels:
+    app: chimera
+    tier: inference
+    latency: batch
+spec:
+  replicas: 12  # Scale based on workload
+  selector:
+    matchLabels:
+      app: chimera
+      tier: inference
+      latency: batch
+  template:
+    metadata:
+      labels:
+        app: chimera
+        tier: inference
+        latency: batch
+    spec:
+      priorityClassName: batch-inference
+      schedulerName: chimera-scheduler  # Use our custom GPU-aware scheduler
+      terminationGracePeriodSeconds: 300  # 5 minutes for graceful shutdown/checkpointing
+      containers:
+      - name: batch-processor
+        image: ${REGISTRY}/chimera/batch-processor:latest
+        env:
+        - name: NATS_SERVERS
+          value: "nats://nats-0.nats:4222,nats://nats-1.nats:4222,nats://nats-2.nats:4222,nats://nats-3.nats:4222,nats://nats-4.nats:4222"
+        - name: NATS_STREAM_SUBJECT
+          value: "chimera.inference.batch.*"
+        - name: TRITON_URL
+          value: "triton-inference-server.inference.svc.cluster.local:8001"
+        - name: ENABLE_TLS
+          value: "true"
+        - name: CHECKPOINT_BUCKET
+          value: "chimera-checkpoints"
+        - name: CHECKPOINT_INTERVAL_SEC
+          value: "60"
+        - name: AWS_REGION
+          value: "eu-west-1"  # Adjust based on deployment
+        - name: BATCH_PROCESSOR_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        volumeMounts:
+        - name: nats-certs
+          mountPath: /etc/nats/certs
+          readOnly: true
+        - name: dshm
+          mountPath: /dev/shm
+        - name: checkpoint-volume
+          mountPath: /data/checkpoints
+        resources:
+          limits:
+            nvidia.com/gpu: 1
+          requests:
+            nvidia.com/gpu: 1
+            cpu: "4"
+            memory: "16Gi"
+        lifecycle:
+          preStop:
+            exec:
+              command: ["/bin/sh", "-c", "python /app/checkpoint.py --final"]
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 10
+      volumes:
+      - name: nats-certs
+        secret:
+          secretName: nats-client-tls
+      - name: dshm
+        emptyDir:
+          medium: Memory
+          sizeLimit: 4Gi
+      - name: checkpoint-volume
+        emptyDir: {}
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 80
+            preference:
+              matchExpressions:
+              - key: node.kubernetes.io/instance-type
+                operator: In
+                values:
+                - p3.8xlarge
+                - g4dn.12xlarge
+                - g5.12xlarge
+          - weight: 60
+            preference:
+              matchExpressions:
+              - key: nvidia.com/gpu.product
+                operator: In
+                values:
+                - NVIDIA-A100-SXM4-80GB
+                - NVIDIA-A100-PCIe-80GB
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: gpu-workload
+                operator: In
+                values:
+                - batch
+              - key: chimera/data-residency
+                operator: In
+                values:
+                - eu-gdpr  # For GDPR compliance
+      tolerations:
+      - key: "node.kubernetes.io/spot-instance"
+        operator: "Exists"
+        effect: "NoSchedule"
+      - key: "nvidia.com/gpu"
+        operator: "Exists"
+        effect: "NoSchedule"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: batch-inference
+  namespace: inference
+  labels:
+    app: chimera
+    tier: inference
+spec:
+  selector:
+    app: chimera
+    tier: inference
+    latency: batch
+  ports:
+  - port: 8080
+    targetPort: 8080
+    name: http
+  type: ClusterIP

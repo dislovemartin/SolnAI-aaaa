@@ -1,0 +1,349 @@
+name: Chimera Platform CI/CD
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+
+env:
+  REGISTRY: ghcr.io
+  REGISTRY_PREFIX: chimera
+
+jobs:
+  # Code Quality and Security Scans
+  code-quality:
+    name: Code Quality and Security
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - lang: python
+            dir: microservices/python
+          - lang: rust
+            dir: microservices/rust
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        if: ${{ matrix.lang == 'python' }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Set up Rust
+        if: ${{ matrix.lang == 'rust' }}
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          components: clippy, rustfmt
+          override: true
+
+      - name: Python Linting
+        if: ${{ matrix.lang == 'python' }}
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 black isort mypy
+          flake8 ${{ matrix.dir }}
+          black --check ${{ matrix.dir }}
+          isort --check ${{ matrix.dir }}
+
+      - name: Rust Linting
+        if: ${{ matrix.lang == 'rust' }}
+        run: |
+          cd ${{ matrix.dir }}/ingestion-service
+          cargo fmt -- --check
+          cargo clippy -- -D warnings
+
+      - name: Security scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '${{ matrix.dir }}'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload security scan results
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  # Unit Tests
+  unit-tests:
+    name: Unit Tests
+    needs: code-quality
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service:
+          - ingestion-service
+          - ml-orchestrator
+          - knowledge-graph
+          - personalization-engine
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        if: ${{ !contains(matrix.service, 'ingestion') }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Set up Rust
+        if: ${{ contains(matrix.service, 'ingestion') }}
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+
+      - name: Run Python tests
+        if: ${{ !contains(matrix.service, 'ingestion') }}
+        run: |
+          cd microservices/python/${{ matrix.service }}
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio pytest-cov
+          python -m pytest tests/unit --cov=app --cov-report=xml
+
+      - name: Run Rust tests
+        if: ${{ contains(matrix.service, 'ingestion') }}
+        run: |
+          cd microservices/rust/${{ matrix.service }}
+          cargo test --no-fail-fast
+
+      - name: Upload test coverage
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage.xml
+          fail_ci_if_error: false
+
+  # Build Docker Images
+  build-images:
+    name: Build Docker Images
+    needs: unit-tests
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service:
+          - ingestion-service
+          - ml-orchestrator
+          - knowledge-graph
+          - personalization-engine
+        include:
+          - service: ingestion-service
+            dir: microservices/rust/ingestion-service
+          - service: ml-orchestrator
+            dir: microservices/python/ml-orchestrator
+          - service: knowledge-graph
+            dir: microservices/python/knowledge-graph
+          - service: personalization-engine
+            dir: microservices/python/personalization-engine
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.REGISTRY_PREFIX }}-${{ matrix.service }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: ${{ matrix.dir }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # Integration Tests
+  integration-tests:
+    name: Integration Tests
+    needs: build-images
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
+    services:
+      nats:
+        image: nats:2.10.7-alpine
+        ports:
+          - 4222:4222
+        options: --name=nats --health-cmd="nats-server check connection --host localhost --port 4222" --health-interval=5s
+      redis:
+        image: redislabs/redisearch:latest
+        ports:
+          - 6379:6379
+        options: --name=redis --health-cmd="redis-cli ping" --health-interval=5s
+      neo4j:
+        image: neo4j:5.13.0
+        ports:
+          - 7474:7474
+          - 7687:7687
+        env:
+          NEO4J_AUTH: neo4j/testpassword
+        options: --name=neo4j --health-cmd="wget http://localhost:7474 -O /dev/null" --health-interval=10s
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run integration tests
+        run: |
+          cd tests/integration
+          pip install -r requirements.txt
+          python -m pytest test_e2e_flows.py -v
+
+      - name: Generate Allure Report
+        if: always()
+        uses: simple-elf/allure-report-action@master
+        with:
+          allure_results: tests/integration/results
+          allure_report: allure-report
+          allure_history: allure-history
+
+      - name: Upload test artifacts
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-results
+          path: |
+            tests/integration/results
+            allure-report
+
+  # Deploy to Staging Environment
+  deploy-staging:
+    name: Deploy to Staging
+    needs: integration-tests
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/develop' || github.event.inputs.environment == 'staging'
+    environment: staging
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up kubectl
+        uses: azure/k8s-set-context@v3
+        with:
+          kubeconfig: ${{ secrets.KUBE_CONFIG_STAGING }}
+
+      - name: Deploy Kubernetes resources
+        run: |
+          export REGISTRY="${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.REGISTRY_PREFIX }}"
+          export VERSION="${{ github.sha }}"
+          
+          # Update Kubernetes manifests with the correct image tags
+          find infrastructure/k8s -type f -name "*.yaml" -exec sed -i "s/\${REGISTRY}/$REGISTRY/g" {} \;
+          find infrastructure/k8s -type f -name "*.yaml" -exec sed -i "s/latest/$VERSION/g" {} \;
+          
+          # Apply Kubernetes manifests
+          kubectl apply -f infrastructure/k8s/nats-jetstream.yaml
+          kubectl apply -f infrastructure/k8s/triton-inference-server.yaml
+          kubectl apply -f infrastructure/k8s/ingestion-service.yaml
+          kubectl apply -f infrastructure/k8s/ml-orchestrator.yaml
+          kubectl apply -f infrastructure/k8s/knowledge-graph.yaml
+          kubectl apply -f infrastructure/k8s/personalization-engine.yaml
+          
+          # Verify deployment
+          kubectl rollout status deployment/ingestion-service
+          kubectl rollout status deployment/ml-orchestrator
+          kubectl rollout status deployment/knowledge-graph
+          kubectl rollout status deployment/personalization-engine
+
+      - name: Notify deployment
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          SLACK_CHANNEL: deployments
+          SLACK_COLOR: good
+          SLACK_TITLE: Deployment to Staging Completed
+          SLACK_MESSAGE: 'Chimera platform has been deployed to staging environment'
+
+  # Deploy to Production Environment
+  deploy-production:
+    name: Deploy to Production
+    needs: integration-tests
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.event.inputs.environment == 'production'
+    environment: production
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up kubectl
+        uses: azure/k8s-set-context@v3
+        with:
+          kubeconfig: ${{ secrets.KUBE_CONFIG_PRODUCTION }}
+
+      - name: Deploy Kubernetes resources
+        run: |
+          export REGISTRY="${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.REGISTRY_PREFIX }}"
+          export VERSION="${{ github.sha }}"
+          
+          # Update Kubernetes manifests with the correct image tags
+          find infrastructure/k8s -type f -name "*.yaml" -exec sed -i "s/\${REGISTRY}/$REGISTRY/g" {} \;
+          find infrastructure/k8s -type f -name "*.yaml" -exec sed -i "s/latest/$VERSION/g" {} \;
+          
+          # Apply Kubernetes manifests
+          kubectl apply -f infrastructure/k8s/nats-jetstream.yaml
+          kubectl apply -f infrastructure/k8s/triton-inference-server.yaml
+          kubectl apply -f infrastructure/k8s/ingestion-service.yaml
+          kubectl apply -f infrastructure/k8s/ml-orchestrator.yaml
+          kubectl apply -f infrastructure/k8s/knowledge-graph.yaml
+          kubectl apply -f infrastructure/k8s/personalization-engine.yaml
+          
+          # Verify deployment
+          kubectl rollout status deployment/ingestion-service
+          kubectl rollout status deployment/ml-orchestrator
+          kubectl rollout status deployment/knowledge-graph
+          kubectl rollout status deployment/personalization-engine
+
+      - name: Notify deployment
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          SLACK_CHANNEL: deployments
+          SLACK_COLOR: good
+          SLACK_TITLE: Deployment to Production Completed
+          SLACK_MESSAGE: 'Chimera platform has been deployed to production environment'

@@ -1,0 +1,38 @@
+---
+description: documentation and system implementation
+globs: 
+alwaysApply: false
+---
+---
+description: Docs & Strategy Consistency
+globs:
+  - README.md
+  - docs/**/*.md
+  - specification.md
+  - vector_store_resilience.md
+  - ARCHITECTURE.md
+alwaysApply: false
+---
+# 003_docs_alignment_strategy_spec.mdc
+
+id: 003_docs_alignment_strategy_spec
+title: Docs–Code Architecture Alignment Auditor
+category: Strategy
+tags: [documentation, architecture, markdown, specs, synchronization]
+
+rule: >
+  You act as an AI System Strategist responsible for maintaining bidirectional coherence between documentation and system implementation.
+
+  ## Goals
+  - Validate that strategic docs (e.g. ARCHITECTURE.md, spec.md) match implementation reality
+  - Highlight divergences between vector store/backup design vs actual code and configs
+  - Align observed system behavior with claimed design guarantees (e.g. fault tolerance, scalability)
+
+  ## Required Checks
+  - Architectural consistency with deployed YAML specs and Dockerfiles
+  - Verify that backup strategies and personalization workflows match runtime and CRON logic
+  - Detect outdated or vague design language
+
+  ## Output Directives
+  - Highlight mismatches with markdown diff blocks or callouts
+  - Add `Ψ:` annotations for traceability inconsistencies

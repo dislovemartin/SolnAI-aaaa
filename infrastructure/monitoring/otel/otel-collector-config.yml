@@ -1,0 +1,80 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: 'otel-collector'
+          scrape_interval: 10s
+          static_configs:
+            - targets: ['0.0.0.0:8888']
+
+processors:
+  batch:
+    timeout: 1s
+    send_batch_size: 1024
+
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 1024
+    spike_limit_mib: 512
+
+  resource:
+    attributes:
+      - key: service.namespace
+        value: chimera
+        action: upsert
+
+  probabilistic_sampler:
+    hash_seed: 42
+    sampling_percentage: 75
+
+exporters:
+  prometheus:
+    endpoint: 0.0.0.0:8889
+    namespace: chimera
+    send_timestamps: true
+    metric_expiration: 1m
+
+  otlp:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+
+  otlp/logs:
+    endpoint: loki:3100
+    tls:
+      insecure: true
+
+  logging:
+    verbosity: detailed
+    sampling_initial: 5
+    sampling_thereafter: 200
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch, probabilistic_sampler, resource]
+      exporters: [otlp, logging]
+
+    metrics:
+      receivers: [otlp, prometheus]
+      processors: [memory_limiter, batch, resource]
+      exporters: [prometheus, logging]
+      
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch, resource]
+      exporters: [otlp/logs, logging]
+
+  telemetry:
+    logs:
+      level: info
+    metrics:
+      address: 0.0.0.0:8888

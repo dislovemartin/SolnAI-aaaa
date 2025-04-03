@@ -1,0 +1,94 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: triton-inference-server
+  labels:
+    app: triton
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: triton
+  template:
+    metadata:
+      labels:
+        app: triton
+    spec:
+      containers:
+      - name: triton
+        image: nvcr.io/nvidia/tritonserver:24.02-py3
+        args:
+          - "tritonserver"
+          - "--model-repository=/models"
+          - "--http-port=8000"
+          - "--grpc-port=8001"
+          - "--metrics-port=8002"
+          - "--log-verbose=1"
+          - "--model-control-mode=explicit"
+          - "--strict-model-config=false"
+          - "--log-error=true"
+        ports:
+        - containerPort: 8000
+          name: http
+        - containerPort: 8001
+          name: grpc
+        - containerPort: 8002
+          name: metrics
+        volumeMounts:
+        - name: model-repo
+          mountPath: /models
+        resources:
+          limits:
+            nvidia.com/gpu: 1
+          requests:
+            memory: "4Gi"
+            cpu: "2"
+        readinessProbe:
+          httpGet:
+            path: /v2/health/ready
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /v2/health/live
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 5
+      volumes:
+      - name: model-repo
+        persistentVolumeClaim:
+          claimName: triton-model-pvc
+      nodeSelector:
+        nvidia.com/gpu.product: NVIDIA-A100-SXM4-80GB
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: triton-service
+spec:
+  selector:
+    app: triton
+  ports:
+  - name: http
+    port: 8000
+    targetPort: 8000
+  - name: grpc
+    port: 8001
+    targetPort: 8001
+  - name: metrics
+    port: 8002
+    targetPort: 8002
+  type: ClusterIP
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: triton-model-pvc
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 50Gi
+  storageClassName: standard

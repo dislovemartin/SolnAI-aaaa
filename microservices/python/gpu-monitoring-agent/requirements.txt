@@ -1,0 +1,4 @@
+flask==2.3.3
+prometheus-client==0.17.1
+nvidia-ml-py==12.535.77
+gunicorn==21.2.0

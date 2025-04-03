@@ -1,0 +1,68 @@
+# NVIDIA AI Intelligence Platform
+## Development Workspace Specification Rule v1.0
+
+### Core Principles
+* **Reproducibility:** Consistent environments across machines
+* **Consistency:** Standardized tooling and practices
+* **Security:** Secure credential handling and dependency vetting
+* **Efficiency:** Fast feedback loops and infrastructure integration
+* **Collaboration:** Standardized workflows and knowledge sharing
+
+### Environment Requirements
+* **Primary:** Dev Containers (`.devcontainer/devcontainer.json`)
+* **Cloud:** brev.dev for GPU access
+* **Base:** Ubuntu LTS with Docker
+
+### Required Tools
+* Git, Docker, kubectl, Helm
+* Language toolchains:
+  * Rust (stable, 2021 edition)
+  * Python (3.11+) with Poetry/PDM
+  * Node.js (LTS) with npm/yarn
+* VS Code with extensions for Rust, Python, TypeScript, Docker, K8s
+
+### Language Standards
+* **Rust:**
+  * `cargo fmt`, `cargo clippy`, `cargo test`
+  * Proper error handling with `Result`
+* **Python:**
+  * `black`, `ruff`/`flake8`, `mypy`, `pytest`
+  * Type hints mandatory
+* **TypeScript:**
+  * `prettier`, `eslint`, strict typing
+  * Jest/Vitest for testing
+
+### Version Control
+* GitFlow model with protected branches
+* Conventional Commits
+* PRs require description, passing checks, approvals
+
+### Dependencies
+* Commit lockfiles
+* Scan for vulnerabilities
+* Vet new dependencies for security and license
+
+### Secrets
+* No hardcoding in source
+* Use `.env` files locally
+* Secure management in shared environments
+
+### Infrastructure
+* K8s access via RBAC
+* Triton via HTTP/gRPC API
+* Shared dev/staging for databases and queues
+
+### Quality & Documentation
+* Automated linting/formatting
+* Unit and integration tests required
+* Documentation for code, APIs, components
+
+### Security
+* Least privilege principle
+* Keep tools updated
+* No production data in development
+
+### Compliance
+* Mandatory for all contributors
+* Non-compliance blocks PRs
+* Quarterly specification review

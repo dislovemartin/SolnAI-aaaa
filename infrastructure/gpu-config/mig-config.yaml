@@ -1,0 +1,75 @@
+apiVersion: nvidia.com/v1
+kind: MigConfig
+metadata:
+  name: all-3g.10gb
+spec:
+  # A100 80GB configuration with 3 MIG instances
+  gpuConfigs:
+    - deviceName: all
+      devices: all
+      migEnabled: true
+      migGeometry:
+        - gi: 3g.10gb
+          ci: 0,0,0,0,0,0,0
+---
+apiVersion: nvidia.com/v1
+kind: MigConfig
+metadata:
+  name: all-1g.20gb
+spec:
+  # A100 80GB configuration with 4 MIG instances
+  gpuConfigs:
+    - deviceName: all
+      devices: all
+      migEnabled: true
+      migGeometry:
+        - gi: 1g.20gb
+          ci: 0,0,0,0
+---
+apiVersion: nvidia.com/v1
+kind: MigConfig
+metadata:
+  name: mixed-config
+spec:
+  # Mixed configuration with different MIG profiles
+  gpuConfigs:
+    - deviceName: all
+      devices: all
+      migEnabled: true
+      migGeometry:
+        - gi: 2g.20gb
+          ci: 0,0
+        - gi: 1g.10gb
+          ci: 0,0
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: nvidia-mig-manager
+spec:
+  template:
+    spec:
+      containers:
+      - name: nvidia-mig-manager
+        image: nvcr.io/nvidia/k8s/mig-manager:v0.5.0
+        command: ["nvidia-mig-manager"]
+        args:
+          - "--mode=named"
+          - "--config-file=/config/config.yaml"
+        env:
+          - name: NODE_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: spec.nodeName
+        securityContext:
+          privileged: true
+        volumeMounts:
+          - name: config-volume
+            mountPath: /config
+      volumes:
+        - name: config-volume
+          configMap:
+            name: mig-config
+      restartPolicy: OnFailure
+      nodeSelector:
+        nvidia.com/gpu.product: NVIDIA-A100-SXM4-80GB

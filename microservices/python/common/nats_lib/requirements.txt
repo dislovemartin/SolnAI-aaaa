@@ -1,0 +1,4 @@
+pybreaker==1.0.1
+prometheus-client==0.17.1
+loguru==0.7.2
+nats-py==2.6.0 
